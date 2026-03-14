@@ -64,17 +64,11 @@ ifeq ($(BACKEND),opencl)
     OPENCL_LDFLAGS  = -lOpenCL
   endif
 
-  OPENCL_SRCS = opencl/opencl_backend.cpp opencl/broccoli_lib.cpp
-  OPENCL_OBJS = $(BUILDDIR)/opencl_backend.o $(BUILDDIR)/broccoli_lib.o
-
-  ifeq ($(UNAME),Darwin)
-    CLBLAS_DIR ?= $(CURDIR)/../code/BROCCOLI_LIB/clBLASMac
-  else
-    CLBLAS_DIR ?= $(CURDIR)/../code/BROCCOLI_LIB/clBLASLinux
-  endif
+  OPENCL_SRCS = opencl/opencl_backend.cpp opencl/opencl_registration.cpp
+  OPENCL_OBJS = $(BUILDDIR)/opencl_backend.o $(BUILDDIR)/opencl_registration.o
 
   OPENCL_CXXFLAGS = -O2 -std=c++14 -Wall -Wextra -Wno-unused-parameter -Wno-narrowing -w $(DEFINES) \
-    -I. -Iopencl -I$(OPENCL_HEADERS) -I$(CLBLAS_DIR)
+    -I. -Iopencl -I$(OPENCL_HEADERS)
 
   LDFLAGS += -lz $(OPENCL_LDFLAGS)
   ifeq ($(UNAME),Darwin)
@@ -148,11 +142,6 @@ all: setup $(TARGET)
 
 setup:
 	@mkdir -p $(BUILDDIR)
-ifeq ($(BACKEND),opencl)
-	@# Create symlink structure that BROCCOLI_LIB expects: code/Kernels/
-	@mkdir -p opencl/code
-	@ln -sfn ../kernels opencl/code/Kernels
-endif
 
 $(TARGET): $(ALL_OBJS)
 ifeq ($(BACKEND),cuda)
@@ -188,8 +177,8 @@ $(BUILDDIR)/metal_registration.o: metal/metal_registration.mm
 $(BUILDDIR)/opencl_backend.o: opencl/opencl_backend.cpp
 	$(CXX) $(OPENCL_CXXFLAGS) -c $< -o $@
 
-$(BUILDDIR)/broccoli_lib.o: opencl/broccoli_lib.cpp
-	$(CXX) $(OPENCL_CXXFLAGS) -fPIC -c $< -o $@
+$(BUILDDIR)/opencl_registration.o: opencl/opencl_registration.cpp
+	$(CXX) $(OPENCL_CXXFLAGS) -c $< -o $@
 
 # WebGPU backend
 $(BUILDDIR)/webgpu_backend.o: webgpu/webgpu_backend.cpp
@@ -207,5 +196,3 @@ $(BUILDDIR)/cuda_registration.o: cuda/cuda_registration.cu
 
 clean:
 	rm -rf $(BUILDDIR) $(TARGET)
-	rm -f opencl/code/Kernels
-	rmdir opencl/code 2>/dev/null || true

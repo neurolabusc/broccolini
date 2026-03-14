@@ -140,19 +140,6 @@ def build_backend(backend, src_dir):
     make_args = ["make", f"BACKEND={backend}", f"BUILDDIR={build_dir}",
                  f"TARGET={build_dir}/broccolini", "-j4"]
 
-    if backend == "opencl":
-        # clBLAS headers: check BROCCOLI sibling repo
-        for candidate in [
-            os.path.join(src_dir, "..", "code", "BROCCOLI_LIB"),
-            os.path.join(src_dir, "..", "BROCCOLI", "code", "BROCCOLI_LIB"),
-        ]:
-            subdir = ("clBLASMac" if platform.system() == "Darwin"
-                      else "clBLASLinux")
-            clblas = os.path.join(candidate, subdir)
-            if os.path.isdir(clblas):
-                make_args.append(f"CLBLAS_DIR={os.path.abspath(clblas)}")
-                break
-
     if backend == "webgpu":
         wgpu_dir = os.environ.get("WGPU_DIR",
                                   os.path.join(src_dir, "webgpu", "wgpu-native"))

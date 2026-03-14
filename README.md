@@ -218,8 +218,7 @@ metal/                 — Metal backend (macOS)
   shaders/registration.metal — Compute shaders
 opencl/                — OpenCL backend (cross-platform)
   opencl_backend.h/cpp     — C vtable adapter
-  broccoli_lib.h/cpp       — BROCCOLI OpenCL implementation
-  broccoli_constants.h     — Constants
+  opencl_registration.h/cpp — OpenCL GPU implementation
   Eigen/                   — Bundled Eigen (header-only)
   kernels/                 — OpenCL kernel source files
 webgpu/                — WebGPU backend (cross-platform via wgpu-native)

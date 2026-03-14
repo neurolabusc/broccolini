@@ -2478,7 +2478,6 @@ T1MNIResult registerT1MNI(
         c.readBuffer(freshT1, result.alignedLinear.data(), mniVol * sizeof(float));
         wgpuBufferRelease(freshT1);
     }
-    result.params.resize(12);
     for (int i = 0; i < 12; i++) result.params[i] = regParams[i];
 
     // Nonlinear registration

@@ -213,10 +213,9 @@ void dispatch2D(id<MTLComputeCommandEncoder> enc, id<MTLComputePipelineState> ps
 void encodeFill(id<MTLComputeCommandEncoder> enc, id<MTLBuffer> buf, float value, int count) {
     auto& c = ctx();
     auto ps = c.getPipeline("fillFloat");
-    id<MTLBuffer> valBuf = c.newBuffer(&value, sizeof(float));
     [enc setComputePipelineState:ps];
     [enc setBuffer:buf offset:0 atIndex:0];
-    [enc setBuffer:valBuf offset:0 atIndex:1];
+    [enc setBytes:&value length:sizeof(float) atIndex:1];
     dispatch1D(enc, ps, count);
 }
 
@@ -224,10 +223,9 @@ void encodeFillFloat2(id<MTLComputeCommandEncoder> enc, id<MTLBuffer> buf, int c
     auto& c = ctx();
     auto ps = c.getPipeline("fillFloat2");
     float zero[2] = {0, 0};
-    id<MTLBuffer> valBuf = c.newBuffer(zero, sizeof(float) * 2);
     [enc setComputePipelineState:ps];
     [enc setBuffer:buf offset:0 atIndex:0];
-    [enc setBuffer:valBuf offset:0 atIndex:1];
+    [enc setBytes:zero length:sizeof(float) * 2 atIndex:1];
     dispatch1D(enc, ps, count);
 }
 
@@ -243,10 +241,9 @@ void encodeAdd(id<MTLComputeCommandEncoder> enc, id<MTLBuffer> A, id<MTLBuffer> 
 void encodeMultiply(id<MTLComputeCommandEncoder> enc, id<MTLBuffer> vol, float factor, int count) {
     auto& c = ctx();
     auto ps = c.getPipeline("multiplyVolume");
-    id<MTLBuffer> fBuf = c.newBuffer(&factor, sizeof(float));
     [enc setComputePipelineState:ps];
     [enc setBuffer:vol offset:0 atIndex:0];
-    [enc setBuffer:fBuf offset:0 atIndex:1];
+    [enc setBytes:&factor length:sizeof(float) atIndex:1];
     dispatch1D(enc, ps, count);
 }
 
@@ -314,7 +311,6 @@ float calculateMax(id<MTLBuffer> volume, int W, int H, int D) {
     auto& c = ctx();
     Dims dims = {W, H, D};
 
-    id<MTLBuffer> dimBuf = c.newBuffer(&dims, sizeof(Dims));
     id<MTLBuffer> colMaxs = c.newBuffer(H * D * sizeof(float));
     id<MTLBuffer> rowMaxs = c.newBuffer(D * sizeof(float));
 
@@ -325,14 +321,14 @@ float calculateMax(id<MTLBuffer> volume, int W, int H, int D) {
     [enc setComputePipelineState:ps1];
     [enc setBuffer:colMaxs offset:0 atIndex:0];
     [enc setBuffer:volume offset:0 atIndex:1];
-    [enc setBuffer:dimBuf offset:0 atIndex:2];
+    [enc setBytes:&dims length:sizeof(Dims) atIndex:2];
     dispatch2D(enc, ps1, H, D);
 
     auto ps2 = c.getPipeline("calculateRowMaxs");
     [enc setComputePipelineState:ps2];
     [enc setBuffer:rowMaxs offset:0 atIndex:0];
     [enc setBuffer:colMaxs offset:0 atIndex:1];
-    [enc setBuffer:dimBuf offset:0 atIndex:2];
+    [enc setBytes:&dims length:sizeof(Dims) atIndex:2];
     dispatch1D(enc, ps2, D);
 
     [enc endEncoding];
@@ -510,16 +506,7 @@ void nonseparableConvolution3D(
     id<MTLTexture> tex = c.newTexture3D(W, H, D);
     c.copyBufferToTexture(volume, tex, W, H, D);
 
-    // Upload full 7x7x7 filter coefficients (343 floats each)
-    id<MTLBuffer> f1r = c.newBuffer(filterReal1, 343 * sizeof(float));
-    id<MTLBuffer> f1i = c.newBuffer(filterImag1, 343 * sizeof(float));
-    id<MTLBuffer> f2r = c.newBuffer(filterReal2, 343 * sizeof(float));
-    id<MTLBuffer> f2i = c.newBuffer(filterImag2, 343 * sizeof(float));
-    id<MTLBuffer> f3r = c.newBuffer(filterReal3, 343 * sizeof(float));
-    id<MTLBuffer> f3i = c.newBuffer(filterImag3, 343 * sizeof(float));
-
     Dims dims = {W, H, D};
-    id<MTLBuffer> dimBuf = c.newBuffer(&dims, sizeof(Dims));
 
     // Single dispatch — full 7x7x7 convolution per thread, texture-cached
     auto ps = c.getPipeline("nonseparableConv3D_Full");
@@ -530,13 +517,13 @@ void nonseparableConvolution3D(
     [enc setBuffer:resp2 offset:0 atIndex:1];
     [enc setBuffer:resp3 offset:0 atIndex:2];
     [enc setTexture:tex atIndex:0];
-    [enc setBuffer:f1r offset:0 atIndex:3];
-    [enc setBuffer:f1i offset:0 atIndex:4];
-    [enc setBuffer:f2r offset:0 atIndex:5];
-    [enc setBuffer:f2i offset:0 atIndex:6];
-    [enc setBuffer:f3r offset:0 atIndex:7];
-    [enc setBuffer:f3i offset:0 atIndex:8];
-    [enc setBuffer:dimBuf offset:0 atIndex:9];
+    [enc setBytes:filterReal1 length:343 * sizeof(float) atIndex:3];
+    [enc setBytes:filterImag1 length:343 * sizeof(float) atIndex:4];
+    [enc setBytes:filterReal2 length:343 * sizeof(float) atIndex:5];
+    [enc setBytes:filterImag2 length:343 * sizeof(float) atIndex:6];
+    [enc setBytes:filterReal3 length:343 * sizeof(float) atIndex:7];
+    [enc setBytes:filterImag3 length:343 * sizeof(float) atIndex:8];
+    [enc setBytes:&dims length:sizeof(Dims) atIndex:9];
     dispatch3D(enc, ps, W, H, D);
 
     [enc endEncoding];
@@ -556,8 +543,6 @@ void performSmoothing(id<MTLBuffer> output, id<MTLBuffer> input, int W, int H, i
     TIMER_START(smooth);
     auto& c = ctx();
     Dims dims = {W, H, D};
-    id<MTLBuffer> dimBuf = c.newBuffer(&dims, sizeof(Dims));
-    id<MTLBuffer> filterBuf = c.newBuffer(smoothingFilter, 9 * sizeof(float));
     id<MTLBuffer> temp1 = c.newBuffer(W * H * D * sizeof(float));
     id<MTLBuffer> temp2 = c.newBuffer(W * H * D * sizeof(float));
 
@@ -569,8 +554,8 @@ void performSmoothing(id<MTLBuffer> output, id<MTLBuffer> input, int W, int H, i
     [enc setComputePipelineState:ps1];
     [enc setBuffer:temp1 offset:0 atIndex:0];
     [enc setBuffer:input offset:0 atIndex:1];
-    [enc setBuffer:filterBuf offset:0 atIndex:2];
-    [enc setBuffer:dimBuf offset:0 atIndex:3];
+    [enc setBytes:smoothingFilter length:9 * sizeof(float) atIndex:2];
+    [enc setBytes:&dims length:sizeof(Dims) atIndex:3];
     dispatch3D(enc, ps1, W, H, D);
 
     // Barrier: pass 2 reads temp1 written by pass 1
@@ -581,8 +566,8 @@ void performSmoothing(id<MTLBuffer> output, id<MTLBuffer> input, int W, int H, i
     [enc setComputePipelineState:ps2];
     [enc setBuffer:temp2 offset:0 atIndex:0];
     [enc setBuffer:temp1 offset:0 atIndex:1];
-    [enc setBuffer:filterBuf offset:0 atIndex:2];
-    [enc setBuffer:dimBuf offset:0 atIndex:3];
+    [enc setBytes:smoothingFilter length:9 * sizeof(float) atIndex:2];
+    [enc setBytes:&dims length:sizeof(Dims) atIndex:3];
     dispatch3D(enc, ps2, W, H, D);
 
     // Barrier: pass 3 reads temp2 written by pass 2
@@ -593,8 +578,8 @@ void performSmoothing(id<MTLBuffer> output, id<MTLBuffer> input, int W, int H, i
     [enc setComputePipelineState:ps3];
     [enc setBuffer:output offset:0 atIndex:0];
     [enc setBuffer:temp2 offset:0 atIndex:1];
-    [enc setBuffer:filterBuf offset:0 atIndex:2];
-    [enc setBuffer:dimBuf offset:0 atIndex:3];
+    [enc setBytes:smoothingFilter length:9 * sizeof(float) atIndex:2];
+    [enc setBytes:&dims length:sizeof(Dims) atIndex:3];
     dispatch3D(enc, ps3, W, H, D);
 
     [enc endEncoding];
@@ -623,7 +608,7 @@ void performSmoothingInPlace(id<MTLBuffer> volume, int W, int H, int D,
 // Uses pre-allocated temp buffers to avoid per-call allocation.
 void encodeSmoothingInPlace(id<MTLCommandBuffer> cb,
                             id<MTLBuffer> volume, int W, int H, int D,
-                            id<MTLBuffer> filterBuf, id<MTLBuffer> dimBuf,
+                            const float* smoothingFilter, const Dims& dims,
                             id<MTLBuffer> temp1, id<MTLBuffer> temp2,
                             id<MTLBuffer> output) {
     auto& c = ctx();
@@ -635,8 +620,8 @@ void encodeSmoothingInPlace(id<MTLCommandBuffer> cb,
     [enc setComputePipelineState:ps1];
     [enc setBuffer:temp1 offset:0 atIndex:0];
     [enc setBuffer:volume offset:0 atIndex:1];
-    [enc setBuffer:filterBuf offset:0 atIndex:2];
-    [enc setBuffer:dimBuf offset:0 atIndex:3];
+    [enc setBytes:smoothingFilter length:9 * sizeof(float) atIndex:2];
+    [enc setBytes:&dims length:sizeof(Dims) atIndex:3];
     dispatch3D(enc, ps1, W, H, D);
 
     [enc memoryBarrierWithScope:MTLBarrierScopeBuffers];
@@ -645,8 +630,8 @@ void encodeSmoothingInPlace(id<MTLCommandBuffer> cb,
     [enc setComputePipelineState:ps2];
     [enc setBuffer:temp2 offset:0 atIndex:0];
     [enc setBuffer:temp1 offset:0 atIndex:1];
-    [enc setBuffer:filterBuf offset:0 atIndex:2];
-    [enc setBuffer:dimBuf offset:0 atIndex:3];
+    [enc setBytes:smoothingFilter length:9 * sizeof(float) atIndex:2];
+    [enc setBytes:&dims length:sizeof(Dims) atIndex:3];
     dispatch3D(enc, ps2, W, H, D);
 
     [enc memoryBarrierWithScope:MTLBarrierScopeBuffers];
@@ -655,8 +640,8 @@ void encodeSmoothingInPlace(id<MTLCommandBuffer> cb,
     [enc setComputePipelineState:ps3];
     [enc setBuffer:output offset:0 atIndex:0];
     [enc setBuffer:temp2 offset:0 atIndex:1];
-    [enc setBuffer:filterBuf offset:0 atIndex:2];
-    [enc setBuffer:dimBuf offset:0 atIndex:3];
+    [enc setBytes:smoothingFilter length:9 * sizeof(float) atIndex:2];
+    [enc setBytes:&dims length:sizeof(Dims) atIndex:3];
     dispatch3D(enc, ps3, W, H, D);
 
     [enc endEncoding];
@@ -681,13 +666,11 @@ void batchSmoothInPlace(std::initializer_list<id<MTLBuffer>> volumes,
     id<MTLBuffer> output = c.newBuffer(vol * sizeof(float));
 
     Dims dims = {W, H, D};
-    id<MTLBuffer> dimBuf = c.newBuffer(&dims, sizeof(Dims));
-    id<MTLBuffer> filterBuf = c.newBuffer(smoothingFilter, 9 * sizeof(float));
 
     id<MTLCommandBuffer> cb = [c.queue commandBuffer];
     for (id<MTLBuffer> vol_buf : volumes) {
         encodeSmoothingInPlace(cb, vol_buf, W, H, D,
-                               filterBuf, dimBuf, temp1, temp2, output);
+                               smoothingFilter, dims, temp1, temp2, output);
     }
     [cb commit];
     [cb waitUntilCompleted];
@@ -722,10 +705,6 @@ id<MTLBuffer> rescaleVolume(id<MTLBuffer> input, int srcW, int srcH, int srcD,
     fillBuffer(output, 0.0f, dstW * dstH * dstD);
 
     Dims dims = {dstW, dstH, dstD};
-    id<MTLBuffer> dimBuf = c.newBuffer(&dims, sizeof(Dims));
-    id<MTLBuffer> sxBuf = c.newBuffer(&scaleX, sizeof(float));
-    id<MTLBuffer> syBuf = c.newBuffer(&scaleY, sizeof(float));
-    id<MTLBuffer> szBuf = c.newBuffer(&scaleZ, sizeof(float));
 
     auto ps = c.getPipeline("rescaleVolumeLinear");
     id<MTLCommandBuffer> cb = [c.queue commandBuffer];
@@ -733,10 +712,10 @@ id<MTLBuffer> rescaleVolume(id<MTLBuffer> input, int srcW, int srcH, int srcD,
     [enc setComputePipelineState:ps];
     [enc setBuffer:output offset:0 atIndex:0];
     [enc setTexture:tex atIndex:0];
-    [enc setBuffer:sxBuf offset:0 atIndex:1];
-    [enc setBuffer:syBuf offset:0 atIndex:2];
-    [enc setBuffer:szBuf offset:0 atIndex:3];
-    [enc setBuffer:dimBuf offset:0 atIndex:4];
+    [enc setBytes:&scaleX length:sizeof(float) atIndex:1];
+    [enc setBytes:&scaleY length:sizeof(float) atIndex:2];
+    [enc setBytes:&scaleZ length:sizeof(float) atIndex:3];
+    [enc setBytes:&dims length:sizeof(Dims) atIndex:4];
     dispatch3D(enc, ps, dstW, dstH, dstD);
     [enc endEncoding];
     [cb commit];
@@ -772,8 +751,6 @@ id<MTLBuffer> copyVolumeToNew(id<MTLBuffer> src,
         mmZCut, voxelSizeZ
     };
 
-    id<MTLBuffer> paramBuf = c.newBuffer(&cp, sizeof(CopyParams));
-
     // Dispatch over the larger of src/dst dimensions (matching OpenCL's mymax)
     // Kernel has bounds checks for both src and dst coordinates
     int dispW = std::max(srcW, dstW);
@@ -786,7 +763,7 @@ id<MTLBuffer> copyVolumeToNew(id<MTLBuffer> src,
     [enc setComputePipelineState:ps];
     [enc setBuffer:dst offset:0 atIndex:0];
     [enc setBuffer:src offset:0 atIndex:1];
-    [enc setBuffer:paramBuf offset:0 atIndex:2];
+    [enc setBytes:&cp length:sizeof(CopyParams) atIndex:2];
     dispatch3D(enc, ps, dispW, dispH, dispD);
     [enc endEncoding];
     [cb commit];
@@ -869,8 +846,6 @@ void interpolateLinear(id<MTLBuffer> output, id<MTLBuffer> volume,
     c.copyBufferToTexture(volume, tex, W, H, D);
 
     Dims dims = {W, H, D};
-    id<MTLBuffer> dimBuf = c.newBuffer(&dims, sizeof(Dims));
-    id<MTLBuffer> paramBuf = c.newBuffer(params, 12 * sizeof(float));
 
     auto ps = c.getPipeline("interpolateLinearLinear");
     id<MTLCommandBuffer> cb = [c.queue commandBuffer];
@@ -878,8 +853,8 @@ void interpolateLinear(id<MTLBuffer> output, id<MTLBuffer> volume,
     [enc setComputePipelineState:ps];
     [enc setBuffer:output offset:0 atIndex:0];
     [enc setTexture:tex atIndex:0];
-    [enc setBuffer:paramBuf offset:0 atIndex:1];
-    [enc setBuffer:dimBuf offset:0 atIndex:2];
+    [enc setBytes:params length:12 * sizeof(float) atIndex:1];
+    [enc setBytes:&dims length:sizeof(Dims) atIndex:2];
     dispatch3D(enc, ps, W, H, D);
     [enc endEncoding];
     [cb commit];
@@ -898,7 +873,6 @@ void interpolateNonLinear(id<MTLBuffer> output, id<MTLBuffer> volume,
     c.copyBufferToTexture(volume, tex, W, H, D);
 
     Dims dims = {W, H, D};
-    id<MTLBuffer> dimBuf = c.newBuffer(&dims, sizeof(Dims));
 
     auto ps = c.getPipeline("interpolateLinearNonLinear");
     id<MTLCommandBuffer> cb = [c.queue commandBuffer];
@@ -909,7 +883,7 @@ void interpolateNonLinear(id<MTLBuffer> output, id<MTLBuffer> volume,
     [enc setBuffer:dispX offset:0 atIndex:1];
     [enc setBuffer:dispY offset:0 atIndex:2];
     [enc setBuffer:dispZ offset:0 atIndex:3];
-    [enc setBuffer:dimBuf offset:0 atIndex:4];
+    [enc setBytes:&dims length:sizeof(Dims) atIndex:4];
     dispatch3D(enc, ps, W, H, D);
     [enc endEncoding];
     [cb commit];
@@ -924,8 +898,6 @@ void addLinearNonLinearDisplacement(id<MTLBuffer> dispX, id<MTLBuffer> dispY, id
                                     const float* params, int W, int H, int D) {
     auto& c = ctx();
     Dims dims = {W, H, D};
-    id<MTLBuffer> dimBuf = c.newBuffer(&dims, sizeof(Dims));
-    id<MTLBuffer> paramBuf = c.newBuffer(params, 12 * sizeof(float));
 
     auto ps = c.getPipeline("addLinearAndNonLinearDisplacement");
     id<MTLCommandBuffer> cb = [c.queue commandBuffer];
@@ -934,8 +906,8 @@ void addLinearNonLinearDisplacement(id<MTLBuffer> dispX, id<MTLBuffer> dispY, id
     [enc setBuffer:dispX offset:0 atIndex:0];
     [enc setBuffer:dispY offset:0 atIndex:1];
     [enc setBuffer:dispZ offset:0 atIndex:2];
-    [enc setBuffer:paramBuf offset:0 atIndex:3];
-    [enc setBuffer:dimBuf offset:0 atIndex:4];
+    [enc setBytes:params length:12 * sizeof(float) atIndex:3];
+    [enc setBytes:&dims length:sizeof(Dims) atIndex:4];
     dispatch3D(enc, ps, W, H, D);
     [enc endEncoding];
     [cb commit];
@@ -1146,7 +1118,6 @@ void alignTwoVolumesLinear(
     TIMER_END(lin_ref_conv, "  linear: ref convolution");
 
     Dims dims = {W, H, D};
-    id<MTLBuffer> dimBuf = c.newBuffer(&dims, sizeof(Dims));
 
     for (int iter = 0; iter < numIterations; iter++) {
       @autoreleasepool {
@@ -1197,7 +1168,7 @@ void alignTwoVolumesLinear(
                 [enc setBuffer:certainties offset:0 atIndex:1];
                 [enc setBuffer:dirs[d].q1 offset:0 atIndex:2];
                 [enc setBuffer:dirs[d].q2 offset:0 atIndex:3];
-                [enc setBuffer:dimBuf offset:0 atIndex:4];
+                [enc setBytes:&dims length:sizeof(Dims) atIndex:4];
                 dispatch3D(enc, psPhaseDiff, W, H, D);
 
                 // Phase gradients (reads q1/q2, writes phaseGrad — independent of phaseDiff)
@@ -1206,7 +1177,7 @@ void alignTwoVolumesLinear(
                 [enc setBuffer:phaseGrad offset:0 atIndex:0];
                 [enc setBuffer:dirs[d].q1 offset:0 atIndex:1];
                 [enc setBuffer:dirs[d].q2 offset:0 atIndex:2];
-                [enc setBuffer:dimBuf offset:0 atIndex:3];
+                [enc setBytes:&dims length:sizeof(Dims) atIndex:3];
                 dispatch3D(enc, psGrad, W, H, D);
 
                 // Barrier: Amat reads phaseDiff, phaseGrad, certainties
@@ -1214,14 +1185,13 @@ void alignTwoVolumesLinear(
 
                 // A-matrix and h-vector 2D values
                 AParams ap = {W, H, D, filterSize, dirs[d].dirOff, dirs[d].hOff};
-                id<MTLBuffer> apBuf = c.newBuffer(&ap, sizeof(AParams));
                 [enc setComputePipelineState:psAmat2D];
                 [enc setBuffer:A2D offset:0 atIndex:0];
                 [enc setBuffer:h2D offset:0 atIndex:1];
                 [enc setBuffer:phaseDiff offset:0 atIndex:2];
                 [enc setBuffer:phaseGrad offset:0 atIndex:3];
                 [enc setBuffer:certainties offset:0 atIndex:4];
-                [enc setBuffer:apBuf offset:0 atIndex:5];
+                [enc setBytes:&ap length:sizeof(AParams) atIndex:5];
                 dispatch2D(enc, psAmat2D, H, D);
 
                 // Barrier before next direction overwrites phaseDiff/phaseGrad/certainties
@@ -1237,10 +1207,6 @@ void alignTwoVolumesLinear(
         // Reduce A-matrix: 2D -> 1D -> final (single CB with barriers)
         TIMER_START(lin_reduce);
         {
-            id<MTLBuffer> hBuf = c.newBuffer(&H, sizeof(int));
-            id<MTLBuffer> dBuf = c.newBuffer(&D, sizeof(int));
-            id<MTLBuffer> fsBuf = c.newBuffer(&filterSize, sizeof(int));
-
             id<MTLCommandBuffer> cb = [c.queue commandBuffer];
             id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
 
@@ -1249,18 +1215,18 @@ void alignTwoVolumesLinear(
             [enc setComputePipelineState:psA1D];
             [enc setBuffer:A1D offset:0 atIndex:0];
             [enc setBuffer:A2D offset:0 atIndex:1];
-            [enc setBuffer:hBuf offset:0 atIndex:2];
-            [enc setBuffer:dBuf offset:0 atIndex:3];
-            [enc setBuffer:fsBuf offset:0 atIndex:4];
+            [enc setBytes:&H length:sizeof(int) atIndex:2];
+            [enc setBytes:&D length:sizeof(int) atIndex:3];
+            [enc setBytes:&filterSize length:sizeof(int) atIndex:4];
             dispatch2D(enc, psA1D, D, 30);
 
             auto psH1D = c.getPipeline("calculateHVector1D");
             [enc setComputePipelineState:psH1D];
             [enc setBuffer:h1D offset:0 atIndex:0];
             [enc setBuffer:h2D offset:0 atIndex:1];
-            [enc setBuffer:hBuf offset:0 atIndex:2];
-            [enc setBuffer:dBuf offset:0 atIndex:3];
-            [enc setBuffer:fsBuf offset:0 atIndex:4];
+            [enc setBytes:&H length:sizeof(int) atIndex:2];
+            [enc setBytes:&D length:sizeof(int) atIndex:3];
+            [enc setBytes:&filterSize length:sizeof(int) atIndex:4];
             dispatch2D(enc, psH1D, D, 12);
 
             [enc memoryBarrierWithScope:MTLBarrierScopeBuffers];
@@ -1273,8 +1239,8 @@ void alignTwoVolumesLinear(
             [enc setComputePipelineState:psAFinal];
             [enc setBuffer:Amat offset:0 atIndex:0];
             [enc setBuffer:A1D offset:0 atIndex:1];
-            [enc setBuffer:dBuf offset:0 atIndex:2];
-            [enc setBuffer:fsBuf offset:0 atIndex:3];
+            [enc setBytes:&D length:sizeof(int) atIndex:2];
+            [enc setBytes:&filterSize length:sizeof(int) atIndex:3];
             dispatch1D(enc, psAFinal, 30);
 
             // h-vector final (reads h1D which is already done)
@@ -1282,8 +1248,8 @@ void alignTwoVolumesLinear(
             [enc setComputePipelineState:psHFinal];
             [enc setBuffer:hvec offset:0 atIndex:0];
             [enc setBuffer:h1D offset:0 atIndex:1];
-            [enc setBuffer:dBuf offset:0 atIndex:2];
-            [enc setBuffer:fsBuf offset:0 atIndex:3];
+            [enc setBytes:&D length:sizeof(int) atIndex:2];
+            [enc setBytes:&filterSize length:sizeof(int) atIndex:3];
             dispatch1D(enc, psHFinal, 12);
 
             [enc endEncoding];
@@ -1523,7 +1489,6 @@ void alignTwoVolumesNonLinear(
         // Reset tensors/displacement + compute tensor components (single CB)
         TIMER_START(nl_tensor);
         {
-            id<MTLBuffer> dimBuf = c.newBuffer(&dims, sizeof(Dims));
             id<MTLCommandBuffer> cb = [c.queue commandBuffer];
             id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
 
@@ -1536,9 +1501,6 @@ void alignTwoVolumesNonLinear(
             auto psTensor = c.getPipeline("calculateTensorComponents");
             for (int f = 0; f < 6; f++) {
                 const float* pt = filters.projectionTensors[f];
-                id<MTLBuffer> mBufs[6];
-                for (int k = 0; k < 6; k++)
-                    mBufs[k] = c.newBuffer(&pt[k], sizeof(float));
 
                 [enc setComputePipelineState:psTensor];
                 [enc setBuffer:t11 offset:0 atIndex:0];
@@ -1550,8 +1512,8 @@ void alignTwoVolumesNonLinear(
                 [enc setBuffer:q1[f] offset:0 atIndex:6];
                 [enc setBuffer:q2[f] offset:0 atIndex:7];
                 for (int k = 0; k < 6; k++)
-                    [enc setBuffer:mBufs[k] offset:0 atIndex:8 + k];
-                [enc setBuffer:dimBuf offset:0 atIndex:14];
+                    [enc setBytes:&pt[k] length:sizeof(float) atIndex:8 + k];
+                [enc setBytes:&dims length:sizeof(Dims) atIndex:14];
                 dispatch3D(enc, psTensor, W, H, D);
                 [enc memoryBarrierWithScope:MTLBarrierScopeBuffers];
             }
@@ -1566,7 +1528,7 @@ void alignTwoVolumesNonLinear(
             [enc setBuffer:t22 offset:0 atIndex:4];
             [enc setBuffer:t23 offset:0 atIndex:5];
             [enc setBuffer:t33 offset:0 atIndex:6];
-            [enc setBuffer:dimBuf offset:0 atIndex:7];
+            [enc setBytes:&dims length:sizeof(Dims) atIndex:7];
             dispatch3D(enc, psNorms, W, H, D);
 
             [enc endEncoding];
@@ -1583,7 +1545,6 @@ void alignTwoVolumesNonLinear(
         // Tensor norms (post-smooth) + normalize (single CB)
         TIMER_START(nl_normalize);
         {
-            id<MTLBuffer> dimBuf = c.newBuffer(&dims, sizeof(Dims));
             id<MTLCommandBuffer> cb = [c.queue commandBuffer];
             id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
 
@@ -1596,7 +1557,7 @@ void alignTwoVolumesNonLinear(
             [enc setBuffer:t22 offset:0 atIndex:4];
             [enc setBuffer:t23 offset:0 atIndex:5];
             [enc setBuffer:t33 offset:0 atIndex:6];
-            [enc setBuffer:dimBuf offset:0 atIndex:7];
+            [enc setBytes:&dims length:sizeof(Dims) atIndex:7];
             dispatch3D(enc, psNorms, W, H, D);
 
             [enc endEncoding];
@@ -1620,7 +1581,6 @@ void alignTwoVolumesNonLinear(
         // A-matrices and h-vectors (6 filters, single CB with barriers)
         TIMER_START(nl_amat_hvec);
         {
-            id<MTLBuffer> dimBuf = c.newBuffer(&dims, sizeof(Dims));
             auto ps = c.getPipeline("calculateAMatricesAndHVectors");
 
             id<MTLCommandBuffer> cb = [c.queue commandBuffer];
@@ -1629,7 +1589,6 @@ void alignTwoVolumesNonLinear(
             for (int f = 0; f < 6; f++) {
                 struct MorphonParams { int W, H, D, FILTER; };
                 MorphonParams mp = {W, H, D, f};
-                id<MTLBuffer> mpBuf = c.newBuffer(&mp, sizeof(MorphonParams));
 
                 [enc setComputePipelineState:ps];
                 [enc setBuffer:a11 offset:0 atIndex:0];
@@ -1652,7 +1611,7 @@ void alignTwoVolumesNonLinear(
                 [enc setBuffer:fdxBuf offset:0 atIndex:17];
                 [enc setBuffer:fdyBuf offset:0 atIndex:18];
                 [enc setBuffer:fdzBuf offset:0 atIndex:19];
-                [enc setBuffer:mpBuf offset:0 atIndex:20];
+                [enc setBytes:&mp length:sizeof(MorphonParams) atIndex:20];
                 dispatch3D(enc, ps, W, H, D);
                 [enc memoryBarrierWithScope:MTLBarrierScopeBuffers];
             }
@@ -1671,7 +1630,6 @@ void alignTwoVolumesNonLinear(
         // Displacement update + smooth + accumulate
         TIMER_START(nl_disp_update);
         {
-            id<MTLBuffer> dimBuf = c.newBuffer(&dims, sizeof(Dims));
             auto ps = c.getPipeline("calculateDisplacementUpdate");
             id<MTLCommandBuffer> cb = [c.queue commandBuffer];
             id<MTLComputeCommandEncoder> enc = [cb computeCommandEncoder];
@@ -1688,7 +1646,7 @@ void alignTwoVolumesNonLinear(
             [enc setBuffer:h1 offset:0 atIndex:9];
             [enc setBuffer:h2 offset:0 atIndex:10];
             [enc setBuffer:h3 offset:0 atIndex:11];
-            [enc setBuffer:dimBuf offset:0 atIndex:12];
+            [enc setBytes:&dims length:sizeof(Dims) atIndex:12];
             dispatch3D(enc, ps, W, H, D);
             [enc endEncoding];
             [cb commit];

@@ -1,17 +1,16 @@
-/* webgpu_registration.h — WebGPU compute backend for BROCCOLI registration
+/* opencl_registration.h — OpenCL compute backend for phase-based registration
  *
- * Mirrors metal_registration.h API using wgpu-native as the WebGPU implementation.
- * WGSL shaders are embedded; no external shader files needed.
+ * Mirrors the metal/cuda/webgpu registration API using OpenCL.
+ * Kernel source files are loaded from $BROCCOLI_DIR at runtime.
  */
 
-#ifndef WEBGPU_REGISTRATION_H
-#define WEBGPU_REGISTRATION_H
+#ifndef OPENCL_REGISTRATION_H
+#define OPENCL_REGISTRATION_H
 
 #include <vector>
 #include <array>
-#include <cstdint>
 
-namespace webgpu_reg {
+namespace opencl_reg {
 
 struct VolumeDims {
     int W, H, D;
@@ -38,12 +37,10 @@ struct T1MNIResult {
     std::vector<float> alignedNonLinear;
     std::vector<float> skullstripped;
     std::vector<float> interpolated;
-    std::array<float, 12> params;    // 12 affine parameters
+    std::array<float, 12> params;
     std::vector<float> dispX, dispY, dispZ;
 };
 
-/* Universal registration entry point.
- * When nonlinearIterations == 0, performs linear-only registration. */
 T1MNIResult registerT1MNI(
     const float *t1Data,       VolumeDims t1Dims,  VoxelSize t1Vox,
     const float *mniData,      VolumeDims mniDims, VoxelSize mniVox,
@@ -56,6 +53,6 @@ T1MNIResult registerT1MNI(
     int mmZCut,
     bool verbose);
 
-} // namespace webgpu_reg
+} // namespace opencl_reg
 
-#endif /* WEBGPU_REGISTRATION_H */
+#endif /* OPENCL_REGISTRATION_H */
