@@ -1,0 +1,37 @@
+# Build artifacts
+build/
+build_*/
+broccolini
+benchmarks.md
+
+# Compiled objects and libraries
+*.o
+*.a
+*.so
+*.dylib
+*.metallib
+
+# Debug
+*.dSYM/
+
+# Sanitizer
+*.asan
+*.tsan
+*.ubsan
+
+# Python
+__pycache__/
+*.pyc
+
+# Environment
+.env
+
+# macOS
+.DS_Store
+
+# Editor / IDE
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
