@@ -2,7 +2,7 @@
 
 GPU-accelerated spatial normalization (image registration) for NIfTI volumes.
 
-Extracted from [BROCCOLI](https://github.com/wanderine/BROCCOLI) (Eklund et al., 2014) with a pluggable backend architecture supporting Metal, OpenCL, and WebGPU.
+Extracted from [BROCCOLI](https://github.com/wanderine/BROCCOLI) (Eklund et al., 2014) with a pluggable backend architecture supporting CUDA, Metal, OpenCL, and WebGPU.
 
 ## Features
 
@@ -10,6 +10,7 @@ Extracted from [BROCCOLI](https://github.com/wanderine/BROCCOLI) (Eklund et al.,
 - 6 DOF (rigid) or 12 DOF (affine) linear registration
 - Optional nonlinear registration with displacement fields
 - FLIRT-compatible CLI interface
+- CUDA backend (NVIDIA GPUs) — fastest on NVIDIA hardware
 - Metal backend (macOS Apple Silicon) — fast, default on macOS
 - OpenCL backend — cross-platform (macOS, Linux)
 - WebGPU backend — cross-platform via wgpu-native (macOS, Linux, Windows)
@@ -23,6 +24,15 @@ make                    # auto-detect backend (Metal on macOS)
 make BACKEND=metal      # force Metal backend
 make BACKEND=opencl     # force OpenCL backend
 make BACKEND=webgpu     # WebGPU backend (requires wgpu-native)
+make BACKEND=cuda       # CUDA backend (requires CUDA toolkit)
+```
+
+### CUDA backend (Linux, Windows)
+
+Requires the [CUDA Toolkit](https://developer.nvidia.com/cuda-toolkit) (provides `nvcc`). The Makefile auto-detects the GPU architecture. To override:
+
+```bash
+make BACKEND=cuda CUDA_ARCH=sm_89
 ```
 
 ### Metal backend (macOS)
@@ -97,7 +107,7 @@ The `examples/` folder includes skull-stripped brain images for testing:
 - `t1_brain.nii.gz` — Structural (T1) volume (128x181x175, 1mm)
 - `MNI152_T1_1mm_brain.nii.gz` — MNI template at 1mm resolution (182x218x182)
 
-Pre-computed reference outputs are in `examples/metal/`, `examples/opencl/`, and `examples/webgpu/`.
+Pre-computed reference outputs are in `examples/{cuda,metal,opencl,webgpu}/`.
 
 **Run all backend tests:**
 
@@ -137,15 +147,15 @@ This detects available backends, builds each, runs three registration tests (EPI
 
 ### Benchmarks
 
-Measured on Apple M4 (macOS 15.4). Reproduce with `python3 compare_backends.py`.
+Reproduce with `python3 compare_backends.py`.
+
+#### Apple M4 (macOS 15.4)
 
 | Task | Metal | OpenCL | WebGPU |
 |------|-------|--------|--------|
 | EPI to T1 (linear) | 0.3s / 232 MB | 0.6s / 158 MB | 1.0s / 207 MB |
 | T1 to MNI 1mm (linear) | 0.5s / 445 MB | 0.8s / 227 MB | 1.5s / 355 MB |
 | T1 to MNI 1mm (nonlinear) | 3.4s / 798 MB | 4.2s / 298 MB | 8.1s / 411 MB |
-
-Cross-backend NCC (normalized cross-correlation) and HF variance (mean |v[i] - v[i-1]| over consecutive non-zero voxels — higher = more preserved high-frequency detail):
 
 | Task | Metal vs OpenCL | Metal vs WebGPU | OpenCL vs WebGPU |
 |------|----------------|-----------------|------------------|
@@ -155,6 +165,26 @@ Cross-backend NCC (normalized cross-correlation) and HF variance (mean |v[i] - v
 
 | Task | Metal HF | OpenCL HF | WebGPU HF |
 |------|----------|-----------|-----------|
+| EPI to T1 (linear) | 26.3 | 26.3 | 26.3 |
+| T1 to MNI 1mm (linear) | 18.5 | 18.5 | 18.5 |
+| T1 to MNI 1mm (nonlinear) | 18.3 | 18.3 | 18.3 |
+
+#### NVIDIA GB10 (Linux aarch64, Driver 580.126.09)
+
+| Task | CUDA | OpenCL | WebGPU |
+|------|------|--------|--------|
+| EPI to T1 (linear) | 0.7s / 256 MB | 1.0s / 214 MB | 1.1s / 452 MB |
+| T1 to MNI 1mm (linear) | 0.9s / 368 MB | 1.4s / 293 MB | 1.6s / 600 MB |
+| T1 to MNI 1mm (nonlinear) | 4.6s / 478 MB | 5.5s / 403 MB | 9.1s / 666 MB |
+
+| Task | CUDA vs OpenCL | CUDA vs WebGPU | OpenCL vs WebGPU |
+|------|----------------|----------------|------------------|
+| EPI to T1 (linear) | 0.9999 | 1.0000 | 0.9999 |
+| T1 to MNI 1mm (linear) | 0.9998 | 1.0000 | 0.9998 |
+| T1 to MNI 1mm (nonlinear) | 0.9971 | 1.0000 | 0.9971 |
+
+| Task | CUDA HF | OpenCL HF | WebGPU HF |
+|------|---------|-----------|-----------|
 | EPI to T1 (linear) | 26.3 | 26.3 | 26.3 |
 | T1 to MNI 1mm (linear) | 18.5 | 18.5 | 18.5 |
 | T1 to MNI 1mm (nonlinear) | 18.3 | 18.3 | 18.3 |
@@ -179,6 +209,9 @@ Makefile               — Build system
 compare_backends.py    — Build, test, and benchmark all backends
 filters/               — Quadrature filter .bin files (27 files)
 examples/              — Test brain images (EPI, T1, MNI) and reference outputs
+cuda/                  — CUDA backend (NVIDIA GPUs)
+  cuda_backend.h/cpp       — C vtable adapter
+  cuda_registration.h/cu   — CUDA GPU implementation
 metal/                 — Metal backend (macOS)
   metal_backend.h/mm       — C vtable adapter
   metal_registration.h/mm  — Metal GPU implementation
@@ -196,14 +229,8 @@ webgpu/                — WebGPU backend (cross-platform via wgpu-native)
 
 ## Architecture
 
-The executable uses a backend vtable pattern: `main.c` is pure C and calls a backend-agnostic `register_volumes()` function pointer. Each backend provides a factory function (`broc_metal_create_backend()`, `broc_opencl_create_backend()`, or `broc_webgpu_create_backend()`) that returns the vtable.
-
-Adding a new backend (e.g. CUDA) requires:
-1. Create `<backend>/<backend>_backend.{h,cpp}`
-2. Implement the `broc_backend` vtable
-3. Add `#ifdef HAVE_<BACKEND>` to `registration.h`
-4. Add build rules to the Makefile
+The executable uses a backend vtable pattern: `main.c` is pure C and calls a backend-agnostic `register_volumes()` function pointer. Each backend provides a factory function (e.g. `broc_cuda_create_backend()`) that returns the vtable. Adding a new backend requires implementing the vtable, adding `#ifdef HAVE_<BACKEND>` to `registration.h`, and adding build rules to the Makefile.
 
 ## License
 
-See the parent repository for license information.
+LGPL 2.1 — see the [BROCCOLI](https://github.com/wanderine/BROCCOLI) parent project.

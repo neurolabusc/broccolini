@@ -1697,7 +1697,7 @@ nifti_image *nifti_image_read(const char *hname, int read_data)
    if (read_data) {
       if (isStdIn) {
          nim->iname = nifti_strdup("-");
-         if (ni_ver != 1) { fprintf(stderr, "piped input only supports NIFTI-1\n"); return NULL; }
+         if (ni_ver != 1) { fprintf(stderr, "piped input only supports NIFTI-1\n"); nifti_image_free(nim); return NULL; }
       }
       /* load image data */
       int64_t ntot = (int64_t)nim->nbyper * nim->nvox;

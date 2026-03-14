@@ -103,11 +103,16 @@ def detect_backends():
         # macOS bundles OpenCL in its SDK
         available.append("opencl")
     elif system == "Linux":
-        # Check for libOpenCL
+        # Check for libOpenCL on various architectures
+        import glob as _glob
         if (shutil.which("clinfo") or
                 os.path.exists("/usr/lib/x86_64-linux-gnu/libOpenCL.so") or
+                os.path.exists("/usr/lib/x86_64-linux-gnu/libOpenCL.so.1") or
+                os.path.exists("/usr/lib/aarch64-linux-gnu/libOpenCL.so") or
+                os.path.exists("/usr/lib/aarch64-linux-gnu/libOpenCL.so.1") or
                 os.path.exists("/usr/lib64/libOpenCL.so") or
-                os.path.exists("/usr/lib/libOpenCL.so")):
+                os.path.exists("/usr/lib/libOpenCL.so") or
+                _glob.glob("/usr/lib/*/libOpenCL.so*")):
             available.append("opencl")
 
     # WebGPU: need wgpu-native
@@ -116,9 +121,9 @@ def detect_backends():
     if os.path.isdir(os.path.join(wgpu_dir, "include")):
         available.append("webgpu")
 
-    # Future: CUDA detection
-    # if shutil.which("nvcc"):
-    #     available.append("cuda")
+    # CUDA: check for nvcc compiler
+    if shutil.which("nvcc"):
+        available.append("cuda")
 
     return available
 

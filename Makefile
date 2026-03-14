@@ -113,6 +113,33 @@ ifeq ($(BACKEND),webgpu)
   ALL_OBJS = $(C_OBJS) $(WEBGPU_OBJS)
 endif
 
+# ---------- CUDA backend ----------
+
+ifeq ($(BACKEND),cuda)
+  NVCC     ?= nvcc
+  DEFINES  = -DHAVE_CUDA -DHAVE_ZLIB
+
+  CUDA_SRCS = cuda/cuda_backend.cpp cuda/cuda_registration.cu
+  CUDA_OBJS = $(BUILDDIR)/cuda_backend.o $(BUILDDIR)/cuda_registration.o
+
+  CUDA_CXXFLAGS = $(CXXFLAGS) $(DEFINES) -I. -Icuda
+  NVCC_FLAGS    = -O2 -std=c++17 --extended-lambda -w $(DEFINES) -I. -Icuda
+
+  # Auto-detect GPU architecture if not specified
+  # --list-gpu-code gives sm_XX codes; fallback to sm_70
+  CUDA_ARCH ?= $(shell nvcc --list-gpu-code 2>/dev/null | tail -1)
+  ifeq ($(CUDA_ARCH),)
+    CUDA_ARCH = sm_70
+  endif
+  NVCC_FLAGS += -arch=$(CUDA_ARCH)
+
+  LDFLAGS += -lz -lcudart
+  # Link with nvcc to resolve CUDA runtime
+  CXX_LINK = $(NVCC) -arch=$(CUDA_ARCH)
+
+  ALL_OBJS = $(C_OBJS) $(CUDA_OBJS)
+endif
+
 # ---------- Rules ----------
 
 .PHONY: all clean setup
@@ -128,7 +155,11 @@ ifeq ($(BACKEND),opencl)
 endif
 
 $(TARGET): $(ALL_OBJS)
+ifeq ($(BACKEND),cuda)
+	$(CXX_LINK) -o $@ $^ $(LDFLAGS)
+else
 	$(CXX) -o $@ $^ $(LDFLAGS)
+endif
 	@echo ""
 	@echo "=== Build successful: $(TARGET) ($(BACKEND) backend) ==="
 	@echo ""
@@ -166,6 +197,13 @@ $(BUILDDIR)/webgpu_backend.o: webgpu/webgpu_backend.cpp
 
 $(BUILDDIR)/webgpu_registration.o: webgpu/webgpu_registration.cpp
 	$(CXX) $(WEBGPU_CXXFLAGS) -c $< -o $@
+
+# CUDA backend
+$(BUILDDIR)/cuda_backend.o: cuda/cuda_backend.cpp
+	$(CXX) $(CUDA_CXXFLAGS) -c $< -o $@
+
+$(BUILDDIR)/cuda_registration.o: cuda/cuda_registration.cu
+	$(NVCC) $(NVCC_FLAGS) -c $< -o $@
 
 clean:
 	rm -rf $(BUILDDIR) $(TARGET)

@@ -395,6 +395,8 @@ int main(int argc, char *argv[])
     broc_backend *backend = NULL;
 #ifdef HAVE_METAL
     backend = broc_metal_create_backend();
+#elif defined(HAVE_CUDA)
+    backend = broc_cuda_create_backend();
 #elif defined(HAVE_WEBGPU)
     backend = broc_webgpu_create_backend();
 #elif defined(HAVE_OPENCL)

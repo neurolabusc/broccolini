@@ -111,6 +111,10 @@ broc_backend *broc_opencl_create_backend(void);
 broc_backend *broc_webgpu_create_backend(void);
 #endif
 
+#ifdef HAVE_CUDA
+broc_backend *broc_cuda_create_backend(void);
+#endif
+
 /* ========== Shared utility functions ========== */
 
 /* Set default registration parameters */
